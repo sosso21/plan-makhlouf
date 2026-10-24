@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maison R+1 – maquette 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#dfe6ea; --bg2:#f3f1ec; --ink:#1d2a33; --muted:#5b6872; --panel:rgba(255,255,255,.86);
+  --line:#c3ccd2; --accent:#2f6f8f; color-scheme:light;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#141b20; --bg2:#222a30; --ink:#e7edf0; --muted:#9aa8b1; --panel:rgba(24,31,36,.88);
+  --line:#36434c; --accent:#7cc0de; color-scheme:dark; } }
+:root[data-theme="dark"]{ --bg:#141b20; --bg2:#222a30; --ink:#e7edf0; --muted:#9aa8b1; --panel:rgba(24,31,36,.88);
+  --line:#36434c; --accent:#7cc0de; color-scheme:dark; }
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:linear-gradient(180deg,var(--bg2),var(--bg));color:var(--ink);
+  font-family:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+#c{position:fixed;inset:0;display:block;width:100%;height:100%;touch-action:none}
+.panel{position:fixed;left:16px;top:calc(16px + env(safe-area-inset-top,0px));width:min(270px,calc(100% - 32px));
+  background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid var(--line);border-radius:14px;padding:16px 16px 14px}
+h1{font-size:1.15rem;font-weight:800;margin:0 0 2px;letter-spacing:-.01em}
+.sub{font-size:.82rem;color:var(--muted);margin:0 0 14px}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+button,.chk{font:inherit;font-size:.85rem;color:var(--ink);background:transparent;border:1px solid var(--line);
+  border-radius:8px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--bg2)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label.cut{display:block;font-size:.85rem;margin:4px 0 6px}
+label.cut span{color:var(--muted);float:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.hint{font-size:.75rem;color:var(--muted);margin:8px 0 0}
+#load{position:fixed;inset:0;display:grid;place-items:center;color:var(--muted);font-size:.95rem;pointer-events:none}
+@media (max-width:520px){ .panel{top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));left:12px;width:calc(100% - 24px);padding:12px}
+  .sub,.hint{display:none} }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="load">Chargement de la maquette…</div>
+<div class="panel">
+  <h1>Maison R+1</h1>
+  <p class="sub">12,25 × 11,95 m – 4 chambres</p>
+  <div class="row" role="group" aria-label="Niveau">
+    <button data-level="rdc" aria-pressed="false">Rez-de-chaussée</button>
+    <button data-level="etage" aria-pressed="true">Étage</button>
+  </div>
+  <div class="row" role="group" aria-label="Vue">
+    <button id="v3d" aria-pressed="true">Vue 3D</button>
+    <button id="vtop" aria-pressed="false">Vue de dessus</button>
+  </div>
+  <div class="row" role="group" aria-label="Calques">
+    <button data-layer="mobilier" aria-pressed="true">Mobilier</button>
+    <button data-layer="etiquettes" aria-pressed="true">Noms des pièces</button>
+  </div>
+  <label class="cut" for="cut">Hauteur de coupe des murs <span id="cutv">2,90 m</span></label>
+  <input id="cut" type="range" min="0.3" max="3.0" step="0.05" value="3.0">
+  <p class="hint">Glisser pour tourner, molette ou pincer pour zoomer, clic droit pour déplacer.</p>
+</div>
+<script src="vendor/three.min.js"></script>
+<script src="vendor/GLTFLoader.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script>
+const MODEL_URL = "models/maison_3D.glb";
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.localClippingEnabled = true;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI/2 - 0.05;
+controls.minDistance = 4; controls.maxDistance = 45;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7f70, 0.75));
+const sun = new THREE.DirectionalLight(0xfff3e0, 0.9);
+sun.position.set(-10, 18, 8); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, {left:-12,right:12,top:12,bottom:-12,near:1,far:50});
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+
+// Niveaux : l'étage commence à 3,05 m (2,90 m sous plafond + dalle de 0,15 m)
+const FL1 = 3.05;
+const cutRdc = new THREE.Plane(new THREE.Vector3(0,-1,0), 99);
+const cutEtage = new THREE.Plane(new THREE.Vector3(0,-1,0), 99);
+const STRUCT = ['Murs','Portes','Vitrages','Poteaux','Cheminee'];
+const FURN = ['Mobilier','Voiture','Lit','Armoire','Sanitaires','Cuisine','Salle_a_manger','Salon','Terrasse','Escalier'];
+const layers = {mobilier:[], etiquettes:[]};
+const etage = [];
+let level = 'etage';
+const starts = (n, list) => list.some(p => n === p || n.startsWith(p + '_'));
+
+new THREE.GLTFLoader().load(MODEL_URL, gltf => {
+  const model = gltf.scene;
+  model.traverse(o => {
+    if (!o.isMesh) return;
+    const isEtage = o.name.startsWith('Etage_');
+    const n = isEtage ? o.name.slice(6) : o.name;
+    if (isEtage) etage.push(o);
+    o.castShadow = !n.startsWith('Terrain') && !n.startsWith('Etiquettes');
+    o.receiveShadow = true;
+    if (o.material.transparent) { o.castShadow = false; o.material.depthWrite = false; }
+    if (starts(n, STRUCT)) { o.material = o.material.clone(); o.material.clippingPlanes = [isEtage ? cutEtage : cutRdc]; }
+    if (starts(n, FURN)) layers.mobilier.push(o);
+    if (n.startsWith('Etiquettes')) layers.etiquettes.push(o);
+  });
+  scene.add(model);
+  applyCut();
+  document.getElementById('load').remove();
+}, undefined, err => { document.getElementById('load').textContent = 'Le modèle n’a pas pu être chargé (' + MODEL_URL + '). Ouvrez la page via un serveur web, pas en double-cliquant.'; });
+
+// Vues
+const views = { v3d:{pos:[-14,15,16], target:[0,1.5,0]}, vtop:{pos:[0,27,0.01], target:[0,1.5,0]} };
+let anim = null;
+function goTo(key){
+  const v = views[key];
+  anim = {t:0, p0:camera.position.clone(), p1:new THREE.Vector3(...v.pos),
+          t0:controls.target.clone(), t1:new THREE.Vector3(...v.target)};
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) anim.t = 1;
+  for (const id of ['v3d','vtop']) document.getElementById(id).setAttribute('aria-pressed', id===key);
+}
+camera.position.set(...views.v3d.pos);
+controls.target.set(...views.v3d.target);
+document.getElementById('v3d').onclick = () => goTo('v3d');
+document.getElementById('vtop').onclick = () => goTo('vtop');
+
+document.querySelectorAll('[data-layer]').forEach(b => b.onclick = () => {
+  const on = b.getAttribute('aria-pressed') !== 'true';
+  b.setAttribute('aria-pressed', on);
+  layers[b.dataset.layer].forEach(o => o.visible = on);
+  applyCut();
+});
+
+const cut = document.getElementById('cut'), cutv = document.getElementById('cutv');
+function applyCut(){
+  const h = +cut.value, full = h >= 2.95;
+  const c = full ? 99 : h;
+  cutRdc.constant = level === 'rdc' ? c : 99;
+  cutEtage.constant = FL1 + c;
+  cutv.textContent = full ? 'complète' : h.toFixed(2).replace('.', ',') + ' m';
+  const showEtage = level === 'etage';
+  etage.forEach(o => {
+    const n = o.name.slice(6);
+    const layer = starts(n, FURN) ? 'mobilier' : n.startsWith('Etiquettes') ? 'etiquettes' : null;
+    const layerOn = !layer || document.querySelector(`[data-layer="${layer}"]`).getAttribute('aria-pressed') === 'true';
+    o.visible = showEtage && layerOn;
+  });
+}
+cut.oninput = applyCut;
+document.querySelectorAll('[data-level]').forEach(b => b.onclick = () => {
+  level = b.dataset.level;
+  document.querySelectorAll('[data-level]').forEach(x => x.setAttribute('aria-pressed', x === b));
+  applyCut();
+});
+
+function resize(){
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+renderer.setAnimationLoop(() => {
+  if (anim) {
+    anim.t = Math.min(1, anim.t + 0.035);
+    const e = 1 - Math.pow(1 - anim.t, 3);
+    camera.position.lerpVectors(anim.p0, anim.p1, e);
+    controls.target.lerpVectors(anim.t0, anim.t1, e);
+    if (anim.t >= 1) anim = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
